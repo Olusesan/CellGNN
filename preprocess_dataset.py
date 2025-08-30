@@ -32,7 +32,7 @@ def create_comprehensive_cell_record(frame_idx, cell_idx, feature_row):
     }
 
 
-def load_and_process_comprehensive_data(folder_path=None, max_frames=50):
+def load_and_process_comprehensive_data(folder_path=None, max_frames=50, negative_ratio=0.5, min_positive_ratio=0.25):
     """Enhanced data loading with comprehensive feature extraction"""
     if folder_path is None:
         folder_path = './01'
@@ -107,6 +107,9 @@ def load_and_process_comprehensive_data(folder_path=None, max_frames=50):
 
     # Create enhanced training dataset
     dataset = []
+    total_pos_edges = 0
+    total_neg_edges = 0
+
     for i in range(len(all_features) - 1):
         features_t1 = all_features[i]
         features_t2 = all_features[i + 1]
@@ -119,13 +122,21 @@ def load_and_process_comprehensive_data(folder_path=None, max_frames=50):
 
         if edge_index.shape[1] == 0:
             continue
+        
+        num_positive_edges = len(labels)
+        desired_negatives = int(num_positive_edges * (1 - negative_ratio) / negative_ratio)
+        num_negative_edges = desired_negatives
+
+        # Ensure minimum positive ratio
+        max_negatives = int(num_positive_edges / min_positive_ratio - num_positive_edges)
+        num_negative_edges = min(num_negative_edges, max_negatives)
 
         # Add negative sampling for better training balance
         num_nodes = len(combined_features)
         neg_edge_index = negative_sampling(
             torch.LongTensor(edge_index), 
             num_nodes=num_nodes,
-            num_neg_samples=min(len(labels), edge_index.shape[1])
+            num_neg_samples=num_negative_edges
         )
         
         # Combine positive and negative edges
@@ -138,6 +149,9 @@ def load_and_process_comprehensive_data(folder_path=None, max_frames=50):
             y=full_labels
         )
         dataset.append(data)
+
+        total_pos_edges += num_positive_edges
+        total_neg_edges += num_negative_edges
 
     print(f"Created {len(dataset)} enhanced temporal graphs with negative sampling")
     return dataset, all_features
